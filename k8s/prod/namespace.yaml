@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vgtechm
+  labels:
+    app.kubernetes.io/name: vgtechm
+    app.kubernetes.io/env: production

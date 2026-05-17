@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(grep -n \"^function BrandMockupImpl\\\\|^}\\\\s*$\" /Users/abylay/Documents/GitHub/vgtechm-frontend-landing/app/components/sections/Cases.tsx)",
-      "Bash(awk 'NR==992,NR==1190' /Users/abylay/Documents/GitHub/vgtechm-frontend-landing/app/components/sections/Cases.tsx)"
+      "Bash(awk 'NR==992,NR==1190' /Users/abylay/Documents/GitHub/vgtechm-frontend-landing/app/components/sections/Cases.tsx)",
+      "Bash(git symbolic-ref *)",
+      "Read(//Users/abylab/Documents/GitHub/fittobefree-client-landing/**)",
+      "Bash(grep -E \"^-.*\\\\.\\(yml|yaml|json\\)$|^d.*\\\\.\\(github|k8s|deploy|kubernetes\\)\")"
     ]
   }
 }

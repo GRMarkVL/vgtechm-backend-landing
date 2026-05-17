@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vgtechm-backend-landing
+  namespace: vgtechm
+  labels:
+    app: vgtechm-backend-landing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vgtechm-backend-landing
+  template:
+    metadata:
+      labels:
+        app: vgtechm-backend-landing
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: vgtechm-backend-landing
+          image: registry.fittobefree.com/vgtechm-backend-landing:latest
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 4005
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "4005"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vgtechm-backend-db
+                  key: DATABASE_URL
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 4005
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 4005
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      imagePullSecrets:
+        - name: registry-secret
