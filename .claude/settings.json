@@ -5,7 +5,17 @@
       "Bash(awk 'NR==992,NR==1190' /Users/abylay/Documents/GitHub/vgtechm-frontend-landing/app/components/sections/Cases.tsx)",
       "Bash(git symbolic-ref *)",
       "Read(//Users/abylab/Documents/GitHub/fittobefree-client-landing/**)",
-      "Bash(grep -E \"^-.*\\\\.\\(yml|yaml|json\\)$|^d.*\\\\.\\(github|k8s|deploy|kubernetes\\)\")"
+      "Bash(grep -E \"^-.*\\\\.\\(yml|yaml|json\\)$|^d.*\\\\.\\(github|k8s|deploy|kubernetes\\)\")",
+      "Bash(rm -rf /Users/abylay/Documents/GitHub/vgtechm-backend-landing/generated && npx prisma generate 2>&1 | tail -10)",
+      "Bash(npx next *)",
+      "Bash(mkdir -p src/common/env src/integrations src/modules)",
+      "Bash(mv src/prisma src/integrations/)",
+      "Bash(mv src/google-calendar src/integrations/)",
+      "Bash(mv src/mail src/integrations/)",
+      "Bash(mv src/telegram src/integrations/)"
+    ],
+    "additionalDirectories": [
+      "/Users/abylay/Documents/GitHub/vgtechm-backend-landing/generated"
     ]
   }
 }
