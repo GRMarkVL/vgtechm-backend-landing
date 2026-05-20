@@ -10,6 +10,7 @@ import { MailModule } from './integrations/mail/mail.module';
 import { TelegramModule } from './integrations/telegram/telegram.module';
 import { BookingModule } from './modules/booking/booking.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
+import { CalendarSyncModule } from './modules/calendar-sync/calendar-sync.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
     BookingModule,
     TelegramModule,
     SchedulerModule,
+    CalendarSyncModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
