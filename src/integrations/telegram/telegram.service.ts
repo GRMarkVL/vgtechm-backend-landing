@@ -28,8 +28,8 @@ type BookingForNotify = {
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramService.name);
-  private readonly bot: Bot | null;
-  private readonly adminChatId: string | undefined;
+  private bot: Bot | null;
+  private readonly adminChatIds: string[];
 
   constructor(
     @Inject(forwardRef(() => BookingService))
@@ -37,21 +37,52 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
   ) {
     const token = process.env.TELEGRAM_BOT_TOKEN;
-    this.adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+    this.adminChatIds = (process.env.TELEGRAM_ADMIN_CHAT_ID || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     this.bot = token ? new Bot(token) : null;
     if (!this.bot) {
       this.logger.warn('TELEGRAM_BOT_TOKEN not set — telegram disabled');
+    }
+    if (!this.adminChatIds.length) {
+      this.logger.warn('TELEGRAM_ADMIN_CHAT_ID not set — admin notifications disabled');
     }
   }
 
   async onModuleInit() {
     if (!this.bot) return;
     this.registerHandlers();
-    void this.bot.start({ onStart: (me) => this.logger.log(`Bot @${me.username} started`) });
+
+    this.bot.catch((err) => {
+      this.logger.error(`Bot runtime error: ${err.error}`);
+    });
+
+    this.bot
+      .start({
+        onStart: (me) => this.logger.log(`Bot @${me.username} started`),
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('409')) {
+          this.logger.error(
+            'Bot polling failed: another instance is already polling with the same TELEGRAM_BOT_TOKEN. Notifications disabled until restart.',
+          );
+        } else {
+          this.logger.error(`Bot polling failed: ${msg}`);
+        }
+        this.bot = null;
+      });
   }
 
   async onModuleDestroy() {
-    if (this.bot) await this.bot.stop();
+    if (this.bot) {
+      try {
+        await this.bot.stop();
+      } catch (err) {
+        this.logger.warn(`Bot stop error: ${err}`);
+      }
+    }
   }
 
   private fmt(d: Date): string {
@@ -62,7 +93,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     if (!this.bot) return;
 
     const isAdmin = (fromId: number | undefined): boolean =>
-      !!this.adminChatId && fromId !== undefined && String(fromId) === this.adminChatId;
+      fromId !== undefined && this.adminChatIds.includes(String(fromId));
+
+    const actorName = (ctx: { from?: { first_name?: string; username?: string } }) =>
+      ctx.from?.username
+        ? `@${ctx.from.username}`
+        : ctx.from?.first_name || 'админ';
 
     this.bot.callbackQuery(/^confirm:(.+)$/, async (ctx) => {
       if (!isAdmin(ctx.from?.id)) {
@@ -74,7 +110,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         await this.booking.confirm(id);
         await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
         await ctx.answerCallbackQuery({ text: '✅ Подтверждено' });
-        await ctx.reply(`✅ Заявка ${id} подтверждена`);
+        await this.broadcast(`✅ Заявка <code>${id}</code> подтверждена (${actorName(ctx)})`, {
+          parse_mode: 'HTML',
+        });
       } catch (err) {
         this.logger.error(err);
         await ctx.answerCallbackQuery({ text: 'Ошибка' });
@@ -91,7 +129,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         await this.booking.cancel(id);
         await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
         await ctx.answerCallbackQuery({ text: '❌ Отклонено' });
-        await ctx.reply(`❌ Заявка ${id} отклонена`);
+        await this.broadcast(`❌ Заявка <code>${id}</code> отклонена (${actorName(ctx)})`, {
+          parse_mode: 'HTML',
+        });
       } catch (err) {
         this.logger.error(err);
         await ctx.answerCallbackQuery({ text: 'Ошибка' });
@@ -168,7 +208,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   async notifyNewBooking(b: BookingForNotify): Promise<void> {
-    if (!this.bot || !this.adminChatId) return;
+    if (!this.bot || !this.adminChatIds.length) return;
     const answers = formatAnswers(b.direction, b.answers);
     const calendarLine = b.calendarFailed
       ? `\n⚠️ <b>Не удалось создать событие в календаре</b> — добавьте вручную.\n`
@@ -183,7 +223,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       `<b>Ответы:</b>\n${answers}\n` +
       (b.comment ? `\n<b>Комментарий:</b>\n${escapeHtml(b.comment)}` : '');
 
-    await this.bot.api.sendMessage(this.adminChatId, text, {
+    await this.broadcast(text, {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
@@ -197,10 +237,23 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   async notifyReminder(b: BookingForNotify): Promise<void> {
-    if (!this.bot || !this.adminChatId) return;
-    await this.bot.api.sendMessage(
-      this.adminChatId,
+    if (!this.bot || !this.adminChatIds.length) return;
+    await this.broadcast(
       `⏰ Через час: ${this.fmt(b.slotAt)} — ${b.name} (${b.direction}), тел. ${b.phone}`,
+    );
+  }
+
+  private async broadcast(
+    text: string,
+    opts?: Parameters<NonNullable<typeof this.bot>['api']['sendMessage']>[2],
+  ): Promise<void> {
+    if (!this.bot) return;
+    await Promise.allSettled(
+      this.adminChatIds.map((chatId) =>
+        this.bot!.api.sendMessage(chatId, text, opts).catch((err) => {
+          this.logger.warn(`sendMessage to ${chatId} failed: ${err}`);
+        }),
+      ),
     );
   }
 }
