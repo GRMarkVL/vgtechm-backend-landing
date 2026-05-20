@@ -11,7 +11,15 @@ type BookingPayload = {
   direction: 'MARKETING' | 'IT';
 };
 
-type Variant = 'pending' | 'confirmed' | 'cancelled' | 'reminder';
+type Variant = 'pending' | 'confirmed' | 'cancelled' | 'reminder' | 'rescheduled';
+
+type RescheduledPayload = {
+  to: string;
+  name: string;
+  direction: 'MARKETING' | 'IT';
+  oldSlot: Date;
+  newSlot: Date;
+};
 
 @Injectable()
 export class MailService {
@@ -59,6 +67,22 @@ export class MailService {
     );
   }
 
+  async sendRescheduled(p: RescheduledPayload): Promise<void> {
+    const oldWhen = this.fmt(p.oldSlot);
+    const newWhen = this.fmt(p.newSlot);
+    const content = this.buildContent('rescheduled', {
+      name: escapeHtml(p.name),
+      when: newWhen,
+      dirLabel: this.directionLabel(p.direction),
+      oldWhen,
+    });
+    await this.send(
+      p.to,
+      'Время встречи изменилось — VGTechM',
+      this.layout(content),
+    );
+  }
+
   private renderTemplate(variant: Variant, p: BookingPayload): string {
     const when = this.fmt(p.slotAt);
     const dirLabel = this.directionLabel(p.direction);
@@ -70,7 +94,7 @@ export class MailService {
 
   private buildContent(
     variant: Variant,
-    v: { name: string; when: string; dirLabel: string },
+    v: { name: string; when: string; dirLabel: string; oldWhen?: string },
   ): {
     eyebrow: string;
     heading: string;
@@ -131,6 +155,20 @@ export class MailService {
           detailRows: [
             ['Направление', v.dirLabel],
             ['Старт', `${v.when} · Алматы`],
+            ['Длительность', '60 минут'],
+          ],
+          accent: 'amber',
+        };
+      case 'rescheduled':
+        return {
+          eyebrow: 'Время изменилось',
+          heading: `${v.name}, у нас перенос`,
+          intro:
+            'Мы немного сдвинули встречу. Если новое время не подходит — ответьте на письмо, согласуем другое.',
+          detailRows: [
+            ['Направление', v.dirLabel],
+            ['Было', `${v.oldWhen ?? '—'} · Алматы`],
+            ['Стало', `${v.when} · Алматы`],
             ['Длительность', '60 минут'],
           ],
           accent: 'amber',

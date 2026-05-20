@@ -243,6 +243,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  async notifyCalendarChange(
+    bookingId: string,
+    kind: 'cancelled' | 'rescheduled',
+    slotAt: Date,
+  ): Promise<void> {
+    if (!this.bot || !this.adminChatIds.length) return;
+    const verb = kind === 'cancelled' ? 'отменена' : 'перенесена';
+    await this.broadcast(
+      `🔄 Бронь <code>${bookingId}</code> ${verb} из календаря — ${this.fmt(slotAt)}`,
+      { parse_mode: 'HTML' },
+    );
+  }
+
   private async broadcast(
     text: string,
     opts?: Parameters<NonNullable<typeof this.bot>['api']['sendMessage']>[2],

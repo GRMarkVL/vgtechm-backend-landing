@@ -38,3 +38,12 @@ model Booking {
   @@index([slotAt])
   @@index([status])
 }
+
+model CalendarChannel {
+  id         String   @id @default(cuid())
+  channelId  String   @unique
+  resourceId String
+  syncToken  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
