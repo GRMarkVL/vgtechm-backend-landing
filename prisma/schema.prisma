@@ -39,6 +39,27 @@ model Booking {
   @@index([status])
 }
 
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model Post {
+  id            String     @id @default(cuid())
+  slug          String     @unique
+  status        PostStatus @default(DRAFT)
+  coverImageUrl String?
+  title         Json // { "ru": "...", "en": "..." }
+  excerpt       Json // { "ru": "...", "en": "..." }
+  content       Json // { "ru": "...(markdown)...", "en": "..." }
+  tags          String[]   @default([])
+  publishedAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([status, publishedAt])
+}
+
 model CalendarChannel {
   id         String   @id @default(cuid())
   channelId  String   @unique
