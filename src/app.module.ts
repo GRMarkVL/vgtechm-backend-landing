@@ -8,7 +8,9 @@ import { PrismaModule } from './integrations/prisma/prisma.module';
 import { GoogleCalendarModule } from './integrations/google-calendar/google-calendar.module';
 import { MailModule } from './integrations/mail/mail.module';
 import { TelegramModule } from './integrations/telegram/telegram.module';
+import { StorageModule } from './integrations/storage/storage.module';
 import { BookingModule } from './modules/booking/booking.module';
+import { BlogModule } from './modules/blog/blog.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { CalendarSyncModule } from './modules/calendar-sync/calendar-sync.module';
 
@@ -22,7 +24,9 @@ import { CalendarSyncModule } from './modules/calendar-sync/calendar-sync.module
     PrismaModule,
     GoogleCalendarModule,
     MailModule,
+    StorageModule,
     BookingModule,
+    BlogModule,
     TelegramModule,
     SchedulerModule,
     CalendarSyncModule,

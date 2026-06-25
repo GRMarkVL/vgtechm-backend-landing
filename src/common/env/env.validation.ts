@@ -8,6 +8,12 @@ const REQUIRED_ENV = [
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_ADMIN_CHAT_ID',
   'RESEND_API_KEY',
+  'ADMIN_API_KEY',
+  'APP_PUBLIC_URL',
+  'MINIO_ENDPOINT',
+  'MINIO_ACCESS_KEY',
+  'MINIO_SECRET_KEY',
+  'MINIO_BUCKET',
 ] as const;
 
 export function validateEnv(): void {
