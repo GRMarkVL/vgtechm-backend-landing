@@ -2,23 +2,30 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma, Post } from '@prisma/client';
+import { fromZonedTime } from 'date-fns-tz';
 import { PrismaService } from '../../integrations/prisma/prisma.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { ListQueryDto } from './dto/list-query.dto';
+import { ScheduleQueueDto } from './dto/schedule-queue.dto';
 
 export const LOCALES = ['ru', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = 'ru';
 const PAGE_SIZE = 12;
+const ALMATY_TZ = 'Asia/Almaty';
 
 type LocalizedJson = Record<string, string>;
 
 @Injectable()
 export class BlogService {
+  private readonly logger = new Logger(BlogService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   private resolveLocale(lang?: string): Locale {
@@ -117,6 +124,7 @@ export class BlogService {
       title: p.title,
       coverImageUrl: p.coverImageUrl,
       tags: p.tags,
+      scheduledAt: p.scheduledAt,
       publishedAt: p.publishedAt,
       updatedAt: p.updatedAt,
     }));
@@ -134,16 +142,27 @@ export class BlogService {
     const slug = await this.ensureUniqueSlug(slugBase);
 
     const status = dto.status ?? 'DRAFT';
+    const scheduledAt =
+      status === 'SCHEDULED' && dto.scheduledAt
+        ? new Date(dto.scheduledAt)
+        : null;
+    if (status === 'SCHEDULED' && !scheduledAt) {
+      throw new BadRequestException('scheduledAt is required for SCHEDULED');
+    }
     try {
       const post = await this.prisma.post.create({
         data: {
           slug,
           status,
           title: this.toJson(dto.title),
-          excerpt: this.toJson(dto.excerpt),
+          excerpt: this.toJson({
+            ru: dto.excerpt?.ru ?? '',
+            en: dto.excerpt?.en,
+          }),
           content: this.toJson(dto.content),
           coverImageUrl: dto.coverImageUrl,
           tags: dto.tags ?? [],
+          scheduledAt,
           publishedAt: status === 'PUBLISHED' ? new Date() : null,
         },
       });
@@ -169,15 +188,38 @@ export class BlogService {
       data.slug = await this.ensureUniqueSlug(this.slugify(dto.slug), id);
     }
     if (dto.title) data.title = this.toJson(dto.title);
-    if (dto.excerpt) data.excerpt = this.toJson(dto.excerpt);
+    if (dto.excerpt)
+      data.excerpt = this.toJson({
+        ru: dto.excerpt.ru ?? '',
+        en: dto.excerpt.en,
+      });
     if (dto.content) data.content = this.toJson(dto.content);
     if (dto.coverImageUrl !== undefined) data.coverImageUrl = dto.coverImageUrl;
     if (dto.tags !== undefined) data.tags = dto.tags;
+
+    if (dto.scheduledAt !== undefined) {
+      data.scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
+    }
 
     if (dto.status !== undefined) {
       data.status = dto.status;
       if (dto.status === 'PUBLISHED' && !existing.publishedAt) {
         data.publishedAt = new Date();
+      }
+      if (dto.status === 'DRAFT') {
+        data.scheduledAt = null;
+      }
+      if (dto.status === 'SCHEDULED') {
+        const when =
+          dto.scheduledAt !== undefined
+            ? dto.scheduledAt
+              ? new Date(dto.scheduledAt)
+              : null
+            : existing.scheduledAt;
+        if (!when) {
+          throw new BadRequestException('scheduledAt is required for SCHEDULED');
+        }
+        data.scheduledAt = when;
       }
     }
 
@@ -197,6 +239,96 @@ export class BlogService {
       throw err;
     }
     return { id };
+  }
+
+  // ---------- Scheduling ----------
+
+  /** Раскладывает посты в очередь: по одному в день в заданное время (Almaty). */
+  async scheduleQueue(dto: ScheduleQueueDto) {
+    const posts = dto.postIds?.length
+      ? await this.prisma.post.findMany({
+          where: { id: { in: dto.postIds } },
+          orderBy: { createdAt: 'asc' },
+        })
+      : await this.prisma.post.findMany({
+          where: { status: 'DRAFT' },
+          orderBy: { createdAt: 'asc' },
+        });
+
+    if (posts.length === 0) {
+      return { scheduled: [] as { id: string; scheduledAt: Date }[] };
+    }
+
+    // Стартовый день: указанный startDate или завтра (по Almaty).
+    const startDate =
+      dto.startDate ?? this.addDaysToDateStr(this.almatyDateString(new Date()), 1);
+    const weekdaysOnly = dto.weekdaysOnly ?? false;
+
+    const out: { id: string; scheduledAt: Date }[] = [];
+    let dateStr = startDate;
+
+    for (const post of posts) {
+      while (weekdaysOnly && this.isWeekend(dateStr)) {
+        dateStr = this.addDaysToDateStr(dateStr, 1);
+      }
+      const slot = this.almatySlot(dateStr, dto.time);
+      await this.prisma.post.update({
+        where: { id: post.id },
+        data: { status: 'SCHEDULED', scheduledAt: slot },
+      });
+      out.push({ id: post.id, scheduledAt: slot });
+      dateStr = this.addDaysToDateStr(dateStr, 1);
+    }
+
+    return { scheduled: out };
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async publishDue() {
+    const now = new Date();
+    const due = await this.prisma.post.findMany({
+      where: { status: 'SCHEDULED', scheduledAt: { lte: now } },
+    });
+    for (const post of due) {
+      try {
+        await this.prisma.post.update({
+          where: { id: post.id },
+          data: { status: 'PUBLISHED', publishedAt: post.scheduledAt ?? now },
+        });
+        this.logger.log(`Auto-published post ${post.slug} (${post.id})`);
+      } catch (err) {
+        this.logger.error(`Auto-publish failed for ${post.id}: ${err}`);
+      }
+    }
+  }
+
+  /** UTC-инстант для конкретной даты/времени по часовому поясу Almaty. */
+  private almatySlot(dateStr: string, time: string): Date {
+    return fromZonedTime(`${dateStr}T${time}:00`, ALMATY_TZ);
+  }
+
+  /** YYYY-MM-DD для даты в зоне Almaty. */
+  private almatyDateString(d: Date): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: ALMATY_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  }
+
+  /** Прибавляет n календарных дней к строке YYYY-MM-DD (TZ-независимо). */
+  private addDaysToDateStr(dateStr: string, n: number): string {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const next = new Date(Date.UTC(y, m - 1, d) + n * 86_400_000);
+    return next.toISOString().slice(0, 10);
+  }
+
+  /** Суббота/воскресенье для строки YYYY-MM-DD. */
+  private isWeekend(dateStr: string): boolean {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    return day === 0 || day === 6;
   }
 
   // ---------- Mappers ----------

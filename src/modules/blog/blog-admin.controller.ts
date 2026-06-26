@@ -18,6 +18,7 @@ import { StorageService } from '../../integrations/storage/storage.service';
 import { BlogService } from './blog.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { ScheduleQueueDto } from './dto/schedule-queue.dto';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 
@@ -42,6 +43,11 @@ export class BlogAdminController {
   @Post()
   async create(@Body() dto: CreatePostDto) {
     return this.blog.create(dto);
+  }
+
+  @Post('schedule-queue')
+  async scheduleQueue(@Body() dto: ScheduleQueueDto) {
+    return this.blog.scheduleQueue(dto);
   }
 
   @Patch(':id')
