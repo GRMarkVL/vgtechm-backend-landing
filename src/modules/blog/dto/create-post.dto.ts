@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsEnum,
+  IsISO8601,
   IsOptional,
   IsString,
   IsUrl,
@@ -10,10 +11,14 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { LocalizedTextDto } from './localized-text.dto';
+import {
+  LocalizedTextDto,
+  OptionalLocalizedTextDto,
+} from './localized-text.dto';
 
 export enum PostStatusDto {
   DRAFT = 'DRAFT',
+  SCHEDULED = 'SCHEDULED',
   PUBLISHED = 'PUBLISHED',
 }
 
@@ -30,9 +35,10 @@ export class CreatePostDto {
   @Type(() => LocalizedTextDto)
   title!: LocalizedTextDto;
 
+  @IsOptional()
   @ValidateNested()
-  @Type(() => LocalizedTextDto)
-  excerpt!: LocalizedTextDto;
+  @Type(() => OptionalLocalizedTextDto)
+  excerpt?: OptionalLocalizedTextDto;
 
   @ValidateNested()
   @Type(() => LocalizedTextDto)
@@ -53,4 +59,8 @@ export class CreatePostDto {
   @IsOptional()
   @IsEnum(PostStatusDto)
   status?: PostStatusDto;
+
+  @IsOptional()
+  @IsISO8601()
+  scheduledAt?: string;
 }

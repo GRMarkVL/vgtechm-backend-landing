@@ -12,3 +12,16 @@ export class LocalizedTextDto {
   @MaxLength(20000)
   en?: string;
 }
+
+/** Локализованный текст, где даже `ru` опционален (напр. краткое описание). */
+export class OptionalLocalizedTextDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(20000)
+  ru?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20000)
+  en?: string;
+}

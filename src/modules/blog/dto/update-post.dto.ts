@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsEnum,
+  IsISO8601,
   IsOptional,
   IsString,
   IsUrl,
@@ -10,7 +11,10 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { LocalizedTextDto } from './localized-text.dto';
+import {
+  LocalizedTextDto,
+  OptionalLocalizedTextDto,
+} from './localized-text.dto';
 import { PostStatusDto } from './create-post.dto';
 
 /** Все поля опциональны — обновляются только переданные. */
@@ -30,8 +34,8 @@ export class UpdatePostDto {
 
   @IsOptional()
   @ValidateNested()
-  @Type(() => LocalizedTextDto)
-  excerpt?: LocalizedTextDto;
+  @Type(() => OptionalLocalizedTextDto)
+  excerpt?: OptionalLocalizedTextDto;
 
   @IsOptional()
   @ValidateNested()
@@ -53,4 +57,8 @@ export class UpdatePostDto {
   @IsOptional()
   @IsEnum(PostStatusDto)
   status?: PostStatusDto;
+
+  @IsOptional()
+  @IsISO8601()
+  scheduledAt?: string;
 }
